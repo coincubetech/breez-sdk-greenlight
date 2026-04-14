@@ -33,8 +33,11 @@ log = "0.4"
 once_cell = "1"
 prost = "^0.11"
 regex = "1.8.1"
-# Pin reqwest until https://github.com/seanmonstar/reqwest/issues/2719 is solved
-reqwest = { version = "=0.12.18", features = ["json"] }
+# Upstream pins reqwest = "=0.12.18" pending the fix for
+# https://github.com/seanmonstar/reqwest/issues/2719. We relax this in the
+# coincube fork because breez-sdk-spark 0.13.1's breez-sdk-common requires
+# reqwest ^0.12.23 and the exact pin is otherwise unresolvable.
+reqwest = { version = "0.12.23", features = ["json"] }
 rusqlite = { version = "0.29", features = [
   "serde_json",
   "bundled",
