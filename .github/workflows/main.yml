@@ -3,24 +3,33 @@ name: CI
 # Controls when the workflow will run
 on:
   # Triggers the workflow on push events but only for the "main" branch
-  push:
-    branches: [ main ]
-  pull_request:    
+  pull_request:
+    branches:
+      - main
+      - redesign
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - edited
+      - converted_to_draft
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: batch-${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'edited' && github.event.changes.base == null && github.run_id || 'candidate' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
 
   fmt:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4      
+      - uses: actions/checkout@v4
       - name: Run Format
         run: |
           cd libs
@@ -29,6 +38,7 @@ jobs:
           cargo fmt -- --check
 
   build-core:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     name: Test sdk-core
     runs-on: ubuntu-latest
     steps:
@@ -53,9 +63,9 @@ jobs:
       - name: Run sdk-core tests
         working-directory: libs/sdk-core
         run: cargo test
-      
+
       - name: Check git status
-        env: 
+        env:
           GIT_PAGER: cat
         run: |
           status=$(git status --porcelain)
@@ -67,8 +77,9 @@ jobs:
           else
             echo "No changes in git status"
           fi
-  
+
   build-bindings:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     name: Test sdk-bindings
     runs-on: ubuntu-latest
     env:
@@ -103,7 +114,7 @@ jobs:
           go-version: '1.19.9'
 
       - name: Setup python
-        uses: actions/setup-python@v5 
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -112,14 +123,14 @@ jobs:
         run: cargo build
 
       - name: Build C# bindings
-        working-directory: libs/sdk-bindings       
+        working-directory: libs/sdk-bindings
         run: |
           cargo install uniffi-bindgen-cs --git https://github.com/NordSecurity/uniffi-bindgen-cs --tag v0.9.1+v0.28.3
           uniffi-bindgen-cs src/breez_sdk.udl -o ffi/csharp -c ./uniffi.toml
           cp ../target/debug/libbreez_sdk_bindings.so ffi/csharp
 
       - name: Build golang bindings
-        working-directory: libs/sdk-bindings       
+        working-directory: libs/sdk-bindings
         run: |
           cargo install uniffi-bindgen-go --git https://github.com/NordSecurity/uniffi-bindgen-go --tag v0.3.0+v0.28.3
           uniffi-bindgen-go src/breez_sdk.udl -o ffi/golang -c ./uniffi.toml
@@ -134,6 +145,7 @@ jobs:
           cargo test
 
   build-cli:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     name: Test sdk-cli
     runs-on: ubuntu-latest
     steps:
@@ -156,11 +168,11 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run tools tests
-        working-directory: tools/sdk-cli    
+        working-directory: tools/sdk-cli
         run: cargo test
-      
+
       - name: Check git status
-        env: 
+        env:
           GIT_PAGER: cat
         run: |
           status=$(git status --porcelain)
@@ -174,6 +186,7 @@ jobs:
           fi
 
   build-common:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     name: Test sdk-common
     runs-on: ubuntu-latest
     steps:
@@ -207,9 +220,9 @@ jobs:
       - name: Test sdk-common WASM
         working-directory: libs/sdk-common
         run: wasm-pack test --headless --firefox
-      
+
       - name: Check git status
-        env: 
+        env:
           GIT_PAGER: cat
         run: |
           status=$(git status --porcelain)
@@ -231,6 +244,7 @@ jobs:
         run: wasm-pack test --headless --firefox --features liquid
 
   clippy:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     name: Clippy
     runs-on: ubuntu-latest
     steps:
@@ -268,10 +282,11 @@ jobs:
           cargo clippy -- -D warnings
 
       - name: Clippy WASM
-        working-directory: libs/sdk-common 
+        working-directory: libs/sdk-common
         run: cargo clippy --target=wasm32-unknown-unknown -- -D warnings
 
   notification-plugin:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     name: Check notification plugin
     runs-on: macOS-14
     steps:
@@ -301,18 +316,18 @@ jobs:
         run: cargo build
 
       - name: Build Android bindings
-        working-directory: libs/sdk-bindings       
+        working-directory: libs/sdk-bindings
         run: |
           cargo install gobley-uniffi-bindgen --git https://github.com/breez/gobley --rev f920c275e4f60e22080a6cd280d9562d64eb6ac9
           gobley-uniffi-bindgen -c ./uniffi.toml -o bindings-android/lib/src src/breez_sdk.udl
 
       - name: Run Android build
-        working-directory: libs/sdk-bindings/bindings-android  
+        working-directory: libs/sdk-bindings/bindings-android
         run: |
           ./gradlew build
 
       - name: Build Swift bindings
-        working-directory: libs/sdk-bindings       
+        working-directory: libs/sdk-bindings
         run: |
           cargo run --bin uniffi-bindgen generate src/breez_sdk.udl --no-format --language swift -o bindings-swift/Sources/BreezSDK
           mv bindings-swift/Sources/BreezSDK/breez_sdk.swift bindings-swift/Sources/BreezSDK/BreezSDK.swift
@@ -323,11 +338,12 @@ jobs:
           rm bindings-swift/Sources/BreezSDK/breez_sdkFFI.modulemap
 
       - name: Run Swift build
-        working-directory: libs/sdk-bindings/bindings-swift  
+        working-directory: libs/sdk-bindings/bindings-swift
         run: |
           swift build
-  
+
   react-native:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     name: Check react native
     runs-on: macOS-14
     steps:
@@ -343,22 +359,22 @@ jobs:
         with:
           workspaces: |
             libs -> target
-      
+
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
           version: "27.2"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: React native codegen
-        working-directory: libs/sdk-react-native 
+        working-directory: libs/sdk-react-native
         run: |
           yarn global add tslint typescript
           brew install kotlin ktlint swiftformat
           make react-native
 
       - name: Check git status
-        env: 
+        env:
           GIT_PAGER: cat
         run: |
           status=$(git status --porcelain)
@@ -372,6 +388,7 @@ jobs:
           fi
 
   flutter:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     name: Check flutter
     runs-on: macOS-latest
     steps:
@@ -387,7 +404,7 @@ jobs:
         with:
           workspaces: |
             libs -> target
-      
+
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
@@ -404,9 +421,9 @@ jobs:
         run: |
           make init
           make flutter_rust_bridge
-    
+
       - name: Check git status
-        env: 
+        env:
           GIT_PAGER: cat
         run: |
           status=$(git status --porcelain)
@@ -442,6 +459,7 @@ jobs:
   #
   # See discussion at https://github.com/breez/breez-sdk-greenlight/issues/969#issuecomment-2104700522
   check-sdk-as-dependency:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     name: Check SDK as Rust dependency in fresh project
     runs-on: ubuntu-latest
     steps:
@@ -469,16 +487,17 @@ jobs:
           mkdir new-project
           cd new-project
           cargo init --name test_project --vcs none
-          
+
           # A project might reference our SDK as a git repository
           # cargo add --git https://github.com/breez/breez-sdk-greenlight breez-sdk-core
-          
+
           # In this test, we reference the checked out repo (e.g. this PR branch)
           cargo add --path ../libs/sdk-core breez-sdk-core
-          
+
           cargo clippy -- -D warnings
 
   check-wasm-sdk-common:
+    if: ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || github.event.changes.base != null))) }}
     name: Check sdk-common as a WASM dependancy
     runs-on: ubuntu-latest
     steps:
@@ -507,7 +526,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create project
-        run: |
+        run: |-
           wasm-pack new wasm-project
           cd wasm-project
                     
